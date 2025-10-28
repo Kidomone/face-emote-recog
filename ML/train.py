@@ -1,6 +1,10 @@
+import os
+import time
 import numpy as np
 import matplotlib.pyplot as plt
 
+
+from sklearn.metrics import f1_score
 import torch
 from torch.utils.data import Dataset as Dataset
 from torch.utils.data import DataLoader as DataLoader
@@ -17,7 +21,9 @@ warnings.filterwarnings("ignore", message="You are using `torch.load` with `weig
 from utils.Custom_models import Resnet_Custom
 from utils.Datasets import AffectNet_dataset
 
+import torch.backends.cudnn as cudnn
 
+cudnn.benchmark = True
 
 affectnet_labels_names =   [
     "Anger",
@@ -33,24 +39,25 @@ affectnet_labels_names =   [
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Using {device} device")
 
+from torch.profiler import profile, record_function, ProfilerActivity #----------
+
 
 def train_epoch(model, optimizer, criteria, dataloader, epoch=None):
     global device
+    global scaler
     model.train()
-    num = 0
 
     for inputs, labels  in dataloader:
-        num+=1
-        inputs = inputs.to(device, non_blocking=True)
-        labels = labels.to(device, non_blocking=True)
         optimizer.zero_grad()
-        outputs = model(inputs)
-        loss = criteria(outputs, labels)
+
+        outputs = model(inputs.to(device, non_blocking=True))
+        loss = criteria(outputs, labels.to(device, non_blocking=True))
 
         loss.backward()
         optimizer.step()
 
         # metrics.update(outputs, labels, loss=loss.item())
+
     return model
 
 
@@ -64,16 +71,15 @@ def test_epoch(model, criteria, dataloader, epoch=None, to_show=False):
     loss_all = 0
     with torch.no_grad():
         for inputs, labels  in dataloader:
-            num+=1
-            inputs = inputs.to(device, non_blocking=True)
-            labels = labels.to(device, non_blocking=True)
-            outputs = model(inputs)
-            loss = criteria(outputs, labels)
+            
+            outputs = model(inputs.to(device, non_blocking=True))
+            loss = criteria(outputs, labels.to(device, non_blocking=True))
 
             loss_all += loss
             preds = torch.argmax(outputs, dim=1)
             y_true.append(labels)
             y_pred.append(preds)
+
             # metrics.update(outputs=outputs, labels=labels, loss=loss.item(), is_test=True)
 
     print(f"Epo test  {epoch}:   Loss: {loss:0.3f}")
@@ -100,7 +106,7 @@ def test_epoch(model, criteria, dataloader, epoch=None, to_show=False):
         ConfusionMatrixDisplay(cm, display_labels=target_names).plot(xticks_rotation='vertical')
         plt.show()
    
-    return model
+    return model, f1_score(y_true, y_pred, average='macro')
 
 
 
@@ -119,58 +125,72 @@ def add_param_group(optimizer, model, layer_name, lr=1e-4, weight_decay=1e-5):
         })
 
 
-def save_model(model, epo='test'):
-    name = f"Resnet_Custom_{str(epo)}.pth"
-    torch.save(model, name)
+def save_model(model, epo='test', to_state=False):
+    name = f"ML/models/Resnet_Custom_{str(epo)}.pth"
+    if to_state:
+        torch.save(model.state_dict(), name)
+    else:
+        torch.save(model, name)
 
 
 
 
 if __name__ == "__main__":
-    torch.cuda.empty_cache()
 
-
-    model = Resnet_Custom(output_shape=len(affectnet_labels_names))
-    model_name = "Resnet_AffectNet"
-
-
-    model.to(device)
     num_epo = 20
     start_epo = 1
+    batch_size = 128
+
+    torch.cuda.empty_cache()
+    model = Resnet_Custom(output_shape=len(affectnet_labels_names))
+    model_name = "Resnet_AffectNet"
+    model.to(device)
     
     transforms = T.Compose([
-        T.Resize(96),
+        T.Grayscale(1),
+        T.RandomResizedCrop((84, 70), scale=(0.8, 1.0)),
         T.RandomHorizontalFlip(),
         T.RandomRotation(7),
-        T.Grayscale(1),
-        T.ToTensor(),
+        T.ToImage(),
+        T.ToDtype(torch.float32, scale=True),
+        #T.ToTensor(),
         T.Normalize(mean=[0.5], std=[0.5])
     ])
 
     test_transforms = T.Compose([
-        T.Resize((96, 96)),
         T.Grayscale(1),
-        T.ToTensor(),
+        T.CenterCrop((84, 70)),
+        #T.ToTensor(),
+        T.ToImage(),
+        T.ToDtype(torch.float32, scale=True),
         T.Normalize(mean=[0.5], std=[0.5])
     ])
 
-    dataset_train = AffectNet_dataset(transform=transforms, cache_to_ram=True)
-    dataloader_train = DataLoader(dataset_train, batch_size=16)
 
+
+
+    dataset_train = AffectNet_dataset(transform=transforms, cache_to_ram=True)
     dataset_test = AffectNet_dataset(transform=test_transforms, is_test=True)
-    dataloader_test = DataLoader(dataset_test, batch_size=16, shuffle=True)
+
+    num_workers = min(8, max(1, (os.cpu_count() or 4) - 2)) 
+    dataloader_train = DataLoader(dataset_train, batch_size=batch_size, shuffle=True,
+                                  num_workers=num_workers, pin_memory=True,
+                                  persistent_workers=True, prefetch_factor=2)
+    dataloader_test = DataLoader(dataset_test, batch_size=batch_size, shuffle=False,
+                                 num_workers=num_workers, pin_memory=True,
+                                 persistent_workers=True, prefetch_factor=2)
 
     criteria = torch.nn.CrossEntropyLoss(label_smoothing=0.1)
 
     optimizer = torch.optim.AdamW([
     {'params': model.conv1.parameters(), 'lr': 5e-5},
-    {'params': model.fc.parameters(),    'lr': 1e-3}
+    {'params': model.fc.parameters(),    'lr': 1e-4}
     ], weight_decay=1e-4)
 
-    scheduler = MultiStepLR(optimizer, milestones=[5, 10, 20, 30, 40], gamma=0.4)
-    # scheduler = CosineAnnealingWarmRestarts(optimizer, T_0=10, T_mult=2, eta_min=1e-7)
-
-    model = test_epoch(model, criteria, dataloader_test, 0)
+    # scheduler = MultiStepLR(optimizer, milestones=[5, 10, 15, 20, 30, 40], gamma=0.4)
+    scheduler = CosineAnnealingWarmRestarts(optimizer, T_0=10, eta_min=1e-7)
+    best_f1 = 0
+    model, best_f1 = test_epoch(model, criteria, dataloader_test, 0)
     for epoch in range(start_epo, num_epo+1):
         try:
             if epoch == 3:
@@ -193,20 +213,23 @@ if __name__ == "__main__":
 
     
             model = train_epoch(model, optimizer, criteria, dataloader_train, epoch)
-            print("")
-            model = test_epoch(model, criteria, dataloader_test, epoch)
+            #print("")
+            #if epoch%3==0:
+            model, f1_macro = test_epoch(model, criteria, dataloader_test, epoch)
 
-            if epoch%5==0:
-                save_model(model, epoch)
+            if f1_macro > best_f1:
+                best_f1 = f1_macro
+                save_model(model, 'best_f1', to_state=True)
 
         
-            scheduler.step(epoch)
+            scheduler.step()
 
         except KeyboardInterrupt:
             print('Stopping by manual command')
             break
 
-    model = test_epoch(model, optimizer, criteria, dataloader_test, epoch, to_show=True)
+    model = test_epoch(model, criteria, dataloader_test, epoch, to_show=True)
 
+    print('saving model')
     save_model(model, 'final')
-    
+    print('saved final model')    
