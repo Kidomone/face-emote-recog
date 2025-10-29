@@ -26,5 +26,12 @@ def Resnet_Custom(output_shape=7, load_path=None, to_hidden=False):
     #         nn.Dropout(0.3),
     #         nn.Linear(512, output_shape)
     #     )
-    
+
+    for name, param in model.named_parameters():
+        param.requires_grad = False
+    for param in model.conv1.parameters():
+        param.requires_grad = True
+    for param in model.fc.parameters():
+        param.requires_grad = True
+
     return model

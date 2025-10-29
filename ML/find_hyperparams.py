@@ -1,5 +1,14 @@
+import optuna
+import pickle
+
+
+CACHE_TO_RAM = False
+
+
+
 import os
 import time
+import pandas
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -11,7 +20,7 @@ from torch.utils.data import DataLoader as DataLoader
 from torchvision.transforms import v2 as T
 from torchvision.transforms import functional as F
 from torch.optim.lr_scheduler import MultiStepLR, ReduceLROnPlateau, CosineAnnealingWarmRestarts
-from torch.utils.data import WeightedRandomSampler, DataLoader
+from torch.utils.data import WeightedRandomSampler
 
 
 import warnings
@@ -24,11 +33,6 @@ from utils.Datasets import AffectNet_dataset
 import torch.backends.cudnn as cudnn
 
 cudnn.benchmark = True
-
-
-CACHE_TO_RAM = False
-
-
 
 affectnet_labels_names =   [
     "Anger",
@@ -44,7 +48,7 @@ affectnet_labels_names =   [
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Using {device} device")
 
-from torch.profiler import profile, record_function, ProfilerActivity #----------
+
 
 train_augmentations = torch.nn.Sequential(
     T.RandomResizedCrop((84, 70), scale=(0.8, 1.0)),
@@ -75,6 +79,7 @@ def test_epoch(model, criteria, dataloader, epoch=None, to_show=False):
     global device
     model.eval()
 
+    num = 0
     y_true = []
     y_pred = []
     loss_all = 0
@@ -120,6 +125,18 @@ def test_epoch(model, criteria, dataloader, epoch=None, to_show=False):
 
 
 
+# def train_epoch(model, optimizer, criteria, dataloader, epoch=None):
+#     global device
+
+# def test_epoch(model, criteria, dataloader, epoch=None, to_show=False):
+#     global device
+
+#     return 2.1
+
+
+
+
+
 
 def update_unfreezed_layers(epoch, model, optimizer):
     layer_configs = {
@@ -155,6 +172,7 @@ def add_param_group(optimizer, model, layer_name, lr=1e-4, wd=1e-5):
         })
 
 
+
 def save_model(model, epo='test', to_state=False):
     name = f"ML/models/Resnet_Custom_{str(epo)}.pth"
     if to_state:
@@ -164,6 +182,8 @@ def save_model(model, epo='test', to_state=False):
 
 
 # OOOPS https://arxiv.org/pdf/2105.03588
+
+
 
 
 
@@ -205,15 +225,68 @@ else:
 
 
 
-
-def main():
+def optina_f1(trial):
+    global study
 
     torch.cuda.empty_cache()
     model = Resnet_Custom(output_shape=len(affectnet_labels_names))
     model_name = "Resnet_AffectNet_optuna"
     model.to(device)
 
+    criteria = torch.nn.CrossEntropyLoss(label_smoothing=0.1)
 
+    optim_choise = trial.suggest_categorical("optim_choise", ["AdamW", "SGD", ""])
+    
+    optimizer = torch.optim. # TODO
+    optimizer = torch.optim.AdamW([
+        {'params': model.conv1.parameters(), 'lr': 5e-5, 'weight_decay': 1e-4},
+        {'params': model.fc.parameters(), 'lr': 1e-4, 'weight_decay': 1e-4}
+    ])
+
+    # scheduler = MultiStepLR(optimizer, milestones=[5, 10, 15, 20, 30, 40], gamma=0.4)
+    scheduler = CosineAnnealingWarmRestarts(optimizer, T_0=10, eta_min=1e-7)
+
+    best_f1 = 0
+    best_f1 = test_epoch(model, criteria, dataloader_test, 0)
+    try:
+        for epoch in range(start_epo, num_epo+1):
+            
+            update_unfreezed_layers(epoch, model, optimizer)
+
+            train_epoch(model, optimizer, criteria, dataloader_train, epoch)
+
+            f1_macro = test_epoch(model, criteria, dataloader_test, epoch)
+
+            scheduler.step()
+
+            if f1_macro > best_f1:
+                best_f1 = f1_macro
+
+
+    except KeyboardInterrupt:
+        print(study.best_params)
+        print(study.best_value)
+        print(study.best_trial)
+        df = study.trials_dataframe()
+        df.to_csv('study_inter.csv')
+        pickle.dump(study, 'experiments_inter.pkl')
+
+    f1_macro = test_epoch(model, criteria, dataloader_test, epoch, to_show=True)
+    if f1_macro > best_f1:
+            best_f1 = f1_macro
+    
+    return best_f1
+    
+
+
+    
+
+
+
+
+if __name__ == "__main__":
+
+    
     dataset_train = AffectNet_dataset(transform=transforms, cache_to_ram=CACHE_TO_RAM)
     dataset_test = AffectNet_dataset(transform=test_transforms, is_test=True, cache_to_ram=CACHE_TO_RAM)
 
@@ -236,43 +309,16 @@ def main():
         pin_memory=True
     )
 
-    criteria = torch.nn.CrossEntropyLoss(label_smoothing=0.1)
-
-    optimizer = torch.optim.AdamW([
-        {'params': model.conv1.parameters(), 'lr': 5e-5, 'weight_decay': 1e-4},
-        {'params': model.fc.parameters(), 'lr': 1e-4, 'weight_decay': 1e-4}
-    ])
-
-    # scheduler = MultiStepLR(optimizer, milestones=[5, 10, 15, 20, 30, 40], gamma=0.4)
-    scheduler = CosineAnnealingWarmRestarts(optimizer, T_0=10, eta_min=1e-7)
-    best_f1 = 0
-    best_f1 = test_epoch(model, criteria, dataloader_test, 0)
-    try:
-        for epoch in range(start_epo, num_epo+1):
-            
-            update_unfreezed_layers(epoch, model, optimizer)
-
-            train_epoch(model, optimizer, criteria, dataloader_train, epoch)
-
-            f1_macro = test_epoch(model, criteria, dataloader_test, epoch)
-
-            if f1_macro > best_f1:
-                best_f1 = f1_macro
-                save_model(model, 'best_f1', to_state=True)
-
-        
-            scheduler.step()
-
-    except KeyboardInterrupt:
-        print('Stopping by manual command')
-
-    try:
-        f1_macro = test_epoch(model, criteria, dataloader_test, epoch, to_show=True)
-    finally:
-        print('saving model')
-        save_model(model, 'final')
-        print('saved final model')    
 
 
-if __name__ == "__main__":
-    main()
+
+    study = optuna.create_study(direction='maximize')
+    study.optimize(optina_f1, n_trials=60)
+
+    
+    print(study.best_params)
+    print(study.best_value)
+    print(study.best_trial)
+    df = study.trials_dataframe()
+    df.to_csv('study.csv')
+    pickle.dump(study, 'experiments.pkl')

@@ -27,19 +27,39 @@ class AffectNet_dataset(Dataset):
         self.lbl_dir = os.path.join(self.root, "labels")
         self.image_names = [n for n in os.listdir(self.img_dir) if n.lower().endswith(('.jpg', '.png'))]
         self.transform = transform
+        self.__cache_to_ram = cache_to_ram
+
+
+        self.labels = []
+        for image_name in self.image_names:
+            lbl_path = os.path.join(self.lbl_dir, image_name.rsplit('.', 1)[0] + ".txt")
+            with open(lbl_path, "r") as f:
+                self.labels.append(int(f.readline()[0]))
+
+        if self.__cache_to_ram :
+            self.images = []
+            for image_name in self.image_names:
+                img_path = os.path.join(self.img_dir, image_name)
+                img = Image.open(img_path).convert("L")
+
+                if self.transform is not None:
+                    img = self.transform(img)
+
+                self.images.append(img)
+
+            del self.image_names 
 
     def __len__(self):
-        return len(self.image_names)
+        return len(self.labels)
 
     def __getitem__(self, idx):
+        if self.__cache_to_ram :
+            return self.images[idx], self.labels[idx]
+        
         name = self.image_names[idx]
         img_path = os.path.join(self.img_dir, name)
-        lbl_path = os.path.join(self.lbl_dir, name.rsplit('.', 1)[0] + ".txt")
-        
-        with open(lbl_path, "r") as f:
-            label = int(f.readline()[0])
 
         img = Image.open(img_path).convert("L")
         if self.transform is not None:
             img = self.transform(img)
-        return img, label
+        return img, self.labels[idx]
