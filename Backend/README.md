@@ -1,5 +1,4 @@
-
-## Для создания:
+### Создание Docker-контейнера
 ```
 docker run -d --name oracle-xe \
     -p 1521:1521 -p 5500:5500 \
@@ -9,20 +8,16 @@ docker run -d --name oracle-xe \
 docker start oracle-xe
 ```
 
-
-## Для логов:
-
+### Логирование
 ```
 docker logs -f oracle-xe
 ```
 
-
-
-## Для простого сервера
+### Запуск сервера
 ```
 cd .venv/Scripts
 activate
 cd ../..
 
-uvicorn Backend.main.py
+uvicorn backend.main:app --reload
 ```
