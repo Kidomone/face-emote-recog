@@ -18,10 +18,10 @@ from ML.process_image_file import process_image
 
 app = FastAPI()
 
-templates = Jinja2Templates(directory=os.path.join(os.getcwd(), "Frontend"))
+templates = Jinja2Templates(directory=os.path.join(os.getcwd(), "frontend"))
 app.mount(
     "/static",
-    StaticFiles(directory=os.path.join(os.getcwd(), "Frontend")),
+    StaticFiles(directory=os.path.join(os.getcwd(), "frontend")),
     name="static",
 )
 
@@ -42,15 +42,14 @@ def ensure_db():
         print(f"База данных не доступна или таблицы отсутствуют: {e}")
         print("Инициализация базы данных...")
         asyncio.subprocess.run(
-            ["python", os.path.join("Backend", "database", "drop_db.py")]
+            ["python", os.path.join("backend", "database", "drop_db.py")]
         )
         asyncio.subprocess.run(
-            ["python", os.path.join("Backend", "database", "init_db.py")]
+            ["python", os.path.join("backend", "database", "init_db.py")]
         )
         print("База данных инициализирована.")
 
 
-# Вызываем проверку базы при старте приложения
 ensure_db()
 
 
