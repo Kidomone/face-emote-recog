@@ -19,10 +19,10 @@ from ML.process_image_file import process_image
 
 app = FastAPI()
 
-templates = Jinja2Templates(directory=os.path.join(os.getcwd(), "frontend"))
+templates = Jinja2Templates(directory=os.path.join(os.getcwd(), "public"))
 app.mount(
     "/static",
-    StaticFiles(directory=os.path.join(os.getcwd(), "frontend")),
+    StaticFiles(directory=os.path.join(os.getcwd(), "public")),
     name="static",
 )
 
