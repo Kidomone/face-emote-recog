@@ -1,0 +1,52 @@
+import oracledb
+import os
+
+dsn = os.getenv("ORA_DSN", "localhost/xepdb1")
+
+connection = oracledb.connect(
+    user=os.getenv("ORA_USER", "system"),
+    password=os.getenv("ORA_PASS", "admin"),
+    dsn=dsn,
+)
+cursor = connection.cursor()
+
+cursor.execute(
+    """
+BEGIN
+    EXECUTE IMMEDIATE 'CREATE TABLE UPLOADED_IMAGES (
+        ID NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+        UUID VARCHAR2(36) UNIQUE,
+        USER_ID VARCHAR2(36) NOT NULL,
+        IMAGE_URL VARCHAR2(1000) NOT NULL,
+        ORIGINAL_FILENAME VARCHAR2(255),
+        CREATED_AT TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        STATUS_CODE VARCHAR2(50),
+        CONSTRAINT UPLOADED_IMAGES_USER_FK FOREIGN KEY (USER_ID) REFERENCES USERS(UUID) ON DELETE CASCADE
+    )';
+EXCEPTION
+    WHEN OTHERS THEN
+        IF SQLCODE != -955 THEN
+            RAISE;
+        END IF;
+END;"""
+)
+
+connection.commit()
+
+cursor.execute(
+    """
+BEGIN
+    EXECUTE IMMEDIATE 'CREATE INDEX UPLOADED_IMAGES_USER_IDX ON UPLOADED_IMAGES(USER_ID)';
+    EXECUTE IMMEDIATE 'CREATE INDEX UPLOADED_IMAGES_STATUS_IDX ON UPLOADED_IMAGES(STATUS_CODE)';
+    EXECUTE IMMEDIATE 'CREATE INDEX UPLOADED_IMAGES_CREATED_IDX ON UPLOADED_IMAGES(CREATED_AT)';
+EXCEPTION
+    WHEN OTHERS THEN
+        IF SQLCODE != -955 THEN
+            RAISE;
+        END IF;
+END;"""
+)
+
+connection.commit()
+cursor.close()
+connection.close()
