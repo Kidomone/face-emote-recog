@@ -1,0 +1,13 @@
+version: "3.9"
+
+services:
+  api:
+    build: .
+    container_name: face_api
+    ports:
+      - "8000:8000"
+    environment:
+      ORA_USER: system
+      ORA_PASS: admin
+      ORA_DSN: host.docker.internal/xepdb1
+    restart: unless-stopped
