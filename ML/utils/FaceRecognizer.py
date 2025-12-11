@@ -101,11 +101,11 @@ class FaceRecognizer:
             cur.execute("INSERT INTO HUMANS (UUID) VALUES (:1)", (human_uuid,))
             conn.commit()
             self.embeddings_db[human_uuid] = embedding
-            print(f"New human added: {human_uuid}")
-            return human_uuid
+            info_message = f"Добавлен незнакомый человек"
+            return human_uuid, info_message
         except Exception as e:
             print(f"Error inserting new human: {e}")
-            return None
+            return None, f"Error adding new human: {e}"
         finally:
             cur.close()
             conn.close()
@@ -113,11 +113,13 @@ class FaceRecognizer:
     def process_roi(self, face_roi):
         embedding = self.extract_embedding_from_roi(face_roi)
         if embedding is None:
-            return "unknown", 0.0, None
+            return "unknown", 0.0, None, "Failed to extract embedding"
 
         human_uuid, score = self.recognize_face(embedding)
-        if human_uuid == "unknown":
-            human_uuid = self.add_new_human(embedding)
-            score = 1.0
+        info_message = "Это знакомый человек"
 
-        return human_uuid, score, embedding
+        if human_uuid == "unknown":
+            human_uuid, info_message = self.add_new_human(embedding)
+            score = 100.0
+
+        return human_uuid, score, embedding, info_message

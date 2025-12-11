@@ -4,6 +4,8 @@ import numpy as np
 from PIL import Image
 from ultralytics import YOLO
 import torchvision.transforms.v2 as T
+import os
+import uuid
 
 from ML.utils.Custom_models import Resnet_Custom
 from ML.utils.FaceRecognizer import FaceRecognizer
@@ -23,10 +25,6 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 model_detect = YOLO("ML/models/Yolo_face_detection.pt")
 
 model_emotion = Resnet_Custom(output_shape=len(affectnet_labels_names))
-# pack = torch.load(
-#     "ML/models/Resnet_Custom_best_f1.pth", map_location=device, weights_only=False
-# )
-# model_emotion.load_state_dict(pack)
 model_emotion.eval()
 model_emotion = model_emotion.to(device)
 
@@ -43,10 +41,9 @@ transforms = T.Compose(
 )
 
 
-def process_image(image_bytes: bytes) -> tuple[bytes, dict]:
+def process_image(image_bytes: bytes) -> tuple[bytes, dict, str]:
     nparr = np.frombuffer(image_bytes, np.uint8)
     img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-
     if img is None:
         raise ValueError("Failed to decode image")
 
@@ -74,11 +71,12 @@ def process_image(image_bytes: bytes) -> tuple[bytes, dict]:
                     probs = torch.softmax(outputs, dim=1)
                     pred_idx = torch.argmax(probs, dim=1).item()
                     emotion_conf = float(probs[0][pred_idx].item())
+                    emotion = affectnet_labels_names[pred_idx]
 
-                emotion = affectnet_labels_names[pred_idx]
-
-                # Face recognition + DB update
-                human_uuid, identity_conf, embedding = face_recognizer.process_roi(face)
+                # Face recognition + info message
+                human_uuid, identity_conf, embedding, info_message = (
+                    face_recognizer.process_roi(face)
+                )
 
                 # Draw annotations
                 cv2.rectangle(img, (x1, y1), (x2, y2), (247, 0, 255), 2)
@@ -100,6 +98,7 @@ def process_image(image_bytes: bytes) -> tuple[bytes, dict]:
                         "emotion_confidence": emotion_conf,
                         "identity": human_uuid,
                         "identity_confidence": float(identity_conf),
+                        "info_message": info_message,
                         "all_emotion_scores": {
                             label: float(probs[0][i].item())
                             for i, label in enumerate(affectnet_labels_names)

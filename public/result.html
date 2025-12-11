@@ -41,10 +41,15 @@
             (confidence: {{ "%.2f"|format(face.emotion_confidence) }})
         </p>
 
-        <p><strong>UUID личности:</strong>
-            {{ face.identity }}
-            (confidence: {{ "%.2f"|format(face.identity_confidence) }})
-        </p>
+        {% if face.identity_confidence == 100.0 %}
+            <p><strong>Информация:</strong> {{ face.info_message }}<br />
+                <strong>UUID:</strong> {{ face.identity }}
+            </p>
+        {% else %}
+            <p><strong>UUID:</strong> {{ face.identity }}
+                (confidence: {{ "%.3f"|format(face.identity_confidence) }})
+            </p>
+        {% endif %}
     </div>
     {% endfor %}
 

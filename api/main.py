@@ -26,9 +26,6 @@ app.mount(
     name="static",
 )
 
-UPLOAD_DIR = os.path.join(os.getcwd(), "uploads")
-os.makedirs(UPLOAD_DIR, exist_ok=True)
-
 
 def ensure_db():
     try:
@@ -89,16 +86,13 @@ async def api_process(file: UploadFile = File(...)):
     cursor = connection.cursor()
 
     img_uuid = str(uuid.uuid4())
-    file_path = os.path.join(UPLOAD_DIR, f"{img_uuid}.jpg")
-    with open(file_path, "wb") as f:
-        f.write(image_bytes)
 
     cursor.execute(
         """
         INSERT INTO UPLOADED_IMAGES (UUID, USER_ID, IMAGE_URL, ORIGINAL_FILENAME)
-        VALUES (:1, NULL, :2, :3)
+        VALUES (:1, NULL, NULL, :3)
         """,
-        (img_uuid, file_path, file.filename),
+        (img_uuid, file.filename),
     )
 
     for face in api_data["faces"]:
