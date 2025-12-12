@@ -24,7 +24,8 @@ affectnet_labels_names = [
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 model_detect = YOLO("ML/models/Yolo_face_detection.pt")
 
-model_emotion = Resnet_Custom(output_shape=len(affectnet_labels_names))
+# model_emotion = Resnet_Custom(output_shape=len(affectnet_labels_names), load_path='')
+model_emotion = Resnet_Custom(output_shape=len(affectnet_labels_names), load_path='ML/models/Resnet_Custom_best_f1.pth')
 model_emotion.eval()
 model_emotion = model_emotion.to(device)
 
@@ -80,7 +81,7 @@ def process_image(image_bytes: bytes) -> tuple[bytes, dict, str]:
 
                 # Draw annotations
                 cv2.rectangle(img, (x1, y1), (x2, y2), (247, 0, 255), 2)
-                label_text = f"{human_uuid} | {emotion} ({emotion_conf:.2f})"
+                label_text = f"{emotion} ({emotion_conf:.2f})"
                 cv2.putText(
                     img,
                     label_text,

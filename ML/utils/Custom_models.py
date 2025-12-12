@@ -4,9 +4,9 @@ from torchvision.models import ResNet50_Weights, resnet50
 
 
 def Resnet_Custom(output_shape=7, load_path=None, to_hidden=False):
-    if load_path is not None:
-        model = torch.load(load_path, weights_only=False)
-        return model
+    # if load_path is not None:
+        # model = torch.load(load_path, map_location='cpu', weights_only=False)
+    #     return model
 
     model = resnet50(weights=ResNet50_Weights.IMAGENET1K_V2)
 
@@ -35,5 +35,9 @@ def Resnet_Custom(output_shape=7, load_path=None, to_hidden=False):
         param.requires_grad = True
     for param in model.fc.parameters():
         param.requires_grad = True
+
+    if load_path:
+        state_dict = torch.load(load_path, map_location='cpu')
+        model.load_state_dict(state_dict)
 
     return model

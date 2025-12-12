@@ -25,3 +25,6 @@ pip install -r requirements.txt
 ```
 uvicorn api.main:app --reload
 ```
+
+
+docker network connect face-net face_api_container

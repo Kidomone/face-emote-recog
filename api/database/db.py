@@ -1,12 +1,17 @@
 import oracledb
 import os
 
+#------------
+from dotenv import load_dotenv
+load_dotenv()
+#----------
 
 def get_connection():
+
     user = os.getenv("ORA_USER")
     password = os.getenv("ORA_PASS")
-    dsn = os.getenv("ORA_DSN")
-
+    # dsn = os.getenv("ORA_DSN")
+    dsn = 'oracle-xe:1521/XEPDB1'
     if not user:
         raise ValueError("ORA_USER environment variable not set")
     if not password:
